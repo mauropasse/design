@@ -4,7 +4,7 @@ title: Events Executor
 abstract:
   This article describes the design of an events based executor as an alternative to the waitsets approach.
 published: true
-author: '[Mauro Passerino - iRobot](https://github.com/mauropasse) Lenny Story - iRobot [Alberto Soragna - iRobot](https://github.com/alsora)'
+author: '[Mauro Passerino - iRobot](https://github.com/mauropasse) [Lenny Story - iRobot](https://github.com/Codematic71) [Alberto Soragna - iRobot](https://github.com/alsora)'
 ---
 
 {:toc}
