@@ -1,0 +1,35 @@
+@startuml
+!pragma teoz true
+
+Entity o->o EventsQueue: push(E1)
+
+EventsQueue <-> EventsExecutor: get_events()
+activate EventsExecutor
+
+EventsExecutor -> EventsExecutor: process(E1)
+
+Entity o->o EventsQueue: push(E2)
+
+Entity o->o EventsQueue: push(E3)
+
+||0||
+
+
+
+deactivate EventsExecutor
+
+EventsQueue <-> EventsExecutor: get_events()
+
+activate EventsExecutor
+
+EventsExecutor -> EventsExecutor: process(E2)
+
+
+EventsExecutor -> EventsExecutor: process(E3)
+
+||0||
+
+deactivate EventsExecutor
+
+
+@enduml
