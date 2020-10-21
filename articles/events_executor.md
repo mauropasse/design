@@ -184,6 +184,8 @@ The `EventsExecutor` should take care of correctly handling events that have bee
 
 ![Events Execution](../img/events_executor/execution.png)
 
+The `EventsExecutor` design allows to easily extend the execution of events from a single thread to a multi thread one, simply by creating new threads whenever an entity has to be executed.
+
 ### Cleanup and ownership
 
 The `EventsExecutor` should not keep ownership of the nodes and of the entities that are associated to it.
@@ -201,6 +203,16 @@ This function pointer will be called whenever the entity's destructor is invoked
 Alternative implementations may involve the `EventsExecutor` to keep weak pointers to the entities and lock them before executing any event.
 
 ### Open Issues
+
+The `EventsQueue` does not have a knowledge of QoS settings, this may cause some issues in some particular situations.
+
+##### Unbound growth of event queue
+
+As long as events are pushed into the queue, this will keep growing, regardless of the actual history size of the underlying middleware entity.
+This may cause several events to accumulate, for example while the `EventsExecutor` is not spinning.
+
+
+##### Invalid ordering corner case
 
 The current design may fail to provide a correct ordering of events in some corner case situations.
 In particular, if an entity pushes a number of events greater than its QoS history size while the `EventsExecutor` is busy processing events, then the ordering may be compromised.
