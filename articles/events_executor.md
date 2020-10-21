@@ -63,44 +63,43 @@ Timers are executed in a separate task by a timers manager, where they are kept 
 
 ### EventsQueue
 
-For what concerns entities other than ROS 2 timers, the `EventsExecutor` requires that as soon as these entities have some work to do, they push an event into the executor's `EventsQueue`.
-Note that events are produced in the RMW layer, i.e. where the underlying middleware notifies the ROS 2 entity that there is new work to do, on the other hand, events are executed in the rclcpp layer by the `EventsExecutor`.
-The event data structure that is  pushed into the `EventsQueue`, must contain all what is needed for the executor in order to be able to process that particular event.
-This includes the type of the entity that generated the event and an handle to its corresponding rclcpp object.
+The `EventsExecutor` requires that all the entities (except ROS 2 timers) as soon as they have some work to do, they push an event into the executor's `EventsQueue`.
+The events are produced in the RMW layer, i.e. where the underlying middleware notifies the ROS 2 entity that there is new work to do, on the other hand, events are executed in the rclcpp layer by the `EventsExecutor`.
+The event data structure that is pushed into the `EventsQueue` must contain all what is needed for the executor to be able to process that particular event.
+The data structure so includes the type of the entity that generated the event and a handle to its corresponding rclcpp object.
 
-Considering the entities currently available in ROS 2, the content of the event data-structure can be any of the following:
+Considering the entities currently available in ROS 2, the content of the event data structure can be any of the following:
  - `ExecutorEventType::SUBSCRIPTION_EVENT` and an identifier for a `rclcpp::SubscriptionBase` object.
  - `ExecutorEventType::SERVICE_EVENT` and an identifier for a `rclcpp::ServiceBase` object.
  - `ExecutorEventType::CLIENT_EVENT` and an identifier for a `rclcpp::ClientBase` object.
  - `ExecutorEventType::WAITABLE_EVENT` and an identifier for a `rclcpp::Waitable` object.
      
 Let's consider as an example how ROS 2 subscription are handled in the current implementation of the `EventsExecutor`.
-The underlying middleware will notify the rmw_subscription object whenever a new message arrives. The rmw_subscription object will have to push an event data-structure into the `EventsExecutor`'s queue.
-This event data-structure will contain the `ExecutorEventType::SUBSCRIPTION_EVENT` value (to denote that this event comes from a subscription) and a raw pointer to the `rclcpp::SubscriptionBase` object which will have to execute it.    
+The underlying middleware will notify the rmw_subscription object whenever a new message arrives. The rmw_subscription object will have to push an event data structure into the `EventsExecutor`'s queue.
+This event data structure will contain the `ExecutorEventType::SUBSCRIPTION_EVENT` label (to denote that this event comes from a subscription) and a raw pointer to the `rclcpp::SubscriptionBase` object which will have to execute it.
 
-It is responsibility of the `EventsExecutor` to setup (and eventually also to clean up) entities such that they can push such events.
+It is responsibility of the `EventsExecutor` to setup entities such that they can push such events.
 
 An application can add ROS 2 nodes or callback groups to an `EventsExecutor` using the corresponding APIs (`add_node()` and `add_callback_group()`).
 Added nodes and callback groups are inspected in order to find all the existing ROS 2 entities that have to be associated with the executor.
-Whenever new entities are associated to the `EventsExecutor` an initialization procedure takes place, with the purpose of provisioning those entities with a way for pushing events as soon as they have some work to do.
-This consists in passing the following objects from the rclcpp layer to the rmw layer:
+Whenever new entities are associated to the `EventsExecutor` an initialization procedure takes place, with the purpose of provisioning those entities with a way for pushing events.
+This consists in passing the following items from the rclcpp layer to the rmw layer:
  - The `EventsExecutorCallback`, a function pointer that can be used to push events.
  - The identifier of the rclcpp entity.
- - A pointer to the EventsExecutor itself.
 
-The initialization procedure presents some small variations depending on the type of the entity.
+The initialization procedure presents some small variations depending on the type of the entity:
 
 ##### Client/Server/Subscription
 
 These entities have a 1-to-1 correspondence between objects in the rclcpp and the rmw layer.
-The initialization is straight forward and consists in having the `EventsExecutor` to pass the aforementioned objects to the rclcpp subscription, which then will forward them to rcl and finally to rmw.
+The initialization is straight forward and consists in having the `EventsExecutor` to pass the aforementioned items to the rclcpp subscription, which then will forward them to rcl and finally to rmw.
 
 ##### Waitable
 
 `Waitables` are a concept that exists only in the rclcpp layer.
-Each class that inherits from `Waitable`, will have to define its own function for forwarding objects to the rmw layer.
-For example, a `SubscriptionIntraProcess` relies on a guard condition in the rmw layer, so it will forward to it the tools for pushing events.
-On the other hand, a `QOSEventHandler`, will forward the objects to the underlying rmw QoSEvent implementation.
+Each class that inherits from `Waitable` will have to define its own function for forwarding items to the rmw layer.
+For example, a `SubscriptionIntraProcess` relies on a guard condition in the rmw layer, so it will forward to it the items needed for pushing events.
+On the other hand, a `QOSEventHandler` will forward the aforementioned items to the underlying rmw QoSEvent implementation.
 
 Note that `Waitables` can be used as a way to implement generic custom events, as it will be described in the next sections.
 
@@ -108,18 +107,20 @@ Note that `Waitables` can be used as a way to implement generic custom events, a
 
 Timers are not required to push events into the `EventsExecutor`'s `EventsQueue`, so new timer entities are simply redirected to the `TimersManager` object.
 
+----
+
 The aforementioned entities are initialized as soon as their node or callback group is added to the `EventsExecutor`.
 However, there are also other entities which can push events and that are not related to any node.
 
 ##### EventsExecutorNotifyWaitable
 
 The `EventsExecutorNotifyWaitable` derives from `Waitable` and is used by the `EventsExecutor` to receive an event whenever any of the context interrupt guard condition (e.g. ctrl-c) or the own executor interrupt guard condition are triggered.
-This can be achieved by having this class to implement a function that forwards the tools for pushing events to two distinct rmw guard condition objects.
+This can be achieved by having this class to implement a function that forwards the items needed for pushing events to two distinct rmw guard condition objects.
 
 ##### EventsExecutorEntitiesCollector
 
 The `EventsExecutorEntitiesCollector` derives from `Waitable` and it is used by the `EventsExecutor` to setup entities that are added to nodes or callback groups while it is spinning.
-This class will forward the tools for pushing events to the notify guard condition of each of the nodes associated with the executor.
+This class will forward the items needed for pushing events to the notify guard condition of each of the nodes associated with the executor.
 
 
 ### TimersManager
@@ -130,33 +131,31 @@ It should respect the following specification:
  - The `TimersManager` should support both periodic as well as one-shot timers (with the second currently not available in ROS 2).
  - The `TimersManager` need to support all the modes of a ROS 2 executor (i.e. `spin()`, `spin_some()`, etc).
  - Users should be able to extend the `TimersManager` to improve its performance according to their specific use-case.
- 
-The current implementation of the `TimersManager` implements the above design in the following way.
 
 In order to use the `TimersManager` within a blocking `spin()` call, a `TimersManager` task is started. This task will continuously execute timers and sleep until the next timer is ready as long as the executor is still spinning.
-This is performed through the following loop:
+For example, the current implementation executes this task through the following loop:
  1. Get the time before the first timer expires.
  2. Sleep for the required amount of time.
  3. Execute all ready timers.
- 4. Repeat
+ 4. Repeat.
 
-Creating a new task provides the most efficient way for offloading timers and it ensures that timers are executed in a timely manner, without having to wait for other entities to be processed.
+Creating a new task provides the most efficient way for handling timers and it ensures that timers are executed in a timely manner, without having to wait for other entities to be processed.
 However, this may not be compatible with the non-blocking variants of `spin()`.
-To handle them, the following APIs are exposed:
+To implement these variants, the following APIs are exposed:
  - `get_head_timeout()` which returns the time before the first timer expires.
  - `execute_head_timer()` which execute the first timer if it's ready.
  - `execute_ready_timers()` which execute all the ready timers if any.
 
-By composing these APIs, it is possible to implement the non-blocking variants of `spin()` without the need of additional threads for monitoring the timers.
-This has the advantage to give to the executor a more fine-grained control on which and how many timers are executed and saves the overhead of continuously starting and killing a thread if the `spin()` variants is called within a loop.
+By using these APIs, it is possible to implement the non-blocking variants of `spin()` without the need of additional threads for monitoring the timers.
+This has the advantage to give to the executor a more fine-grained control on which and how many timers are executed, and saves the overhead of continuously starting and killing a thread if the `spin()` variants is called within a loop.
 
 The current implementation of the `TimersManager` uses an heap priority queue to keep the timers sorted.
-Whenever a timer is added or removed from the `TimersManager`, the queue is heapified again.
-Whenever a timer is executed, its expire time will be automatically updated, so it's necessary to provide an efficient operation for updating the root element, while the rest of the queue is still a valid heap.
-This is currently done using the pop_heap function from std library, that has 2 log(n) complexity
+Whenever a timer is added or removed from the `TimersManager`, the queue is heapified again (i.e. reordered to be a valid heap).
+After a timer is executed its expire time will be automatically updated, so it's necessary to provide an efficient operation for updating the root element of the priority queue, while the rest of it is still correctly ordered.
+This is currently done using the `pop_heap()` function from std library, that has 2 log(n) complexity.
 
 Moving the timers management into its own class allows to isolate this feature from the rest of the system, allowing to develop it independently. 
-Moreover, by separating timers execution from sorting, it is possible to extend the `TImersManager` object to use different algorithms, such as timer wheels, or to take advantage of the knowledge of which OS will run your application, by using low level OS timers, without having to modify the executor.
+Moreover, by separating timers execution from sorting, it is possible to extend the `TimersManager` object to use different algorithms -such as timer wheels- or to take advantage of the OS capabilities by using low level OS timers, without having to modify the executor.
 
 
 ### Events Execution
@@ -166,14 +165,16 @@ Events are executed in a FIFO manner, following the order in which they are push
 
 Executing an event is done by calling the corresponding API on the rclcpp object identified by the event.
 Let's consider a ROS 2 subscription as an example.
-The event will contain the `ExecutorEventType::SUBSCRIPTION_EVENT` value, so the executor will know that it has to get the `rclcpp::SubscriptionBase` object that generated this event and call the `take_and_do_error_handling()` API.
+The event will contain the `ExecutorEventType::SUBSCRIPTION_EVENT` label and an identifier to a `rclcpp::SubscriptionBase` object, and the executor will use them to get the `rclcpp::SubscriptionBase` object that needs to be passed to the `execute_subscription()` API.
 
-`Waitables` implement their own `execute()` API, which can be called directly.
+`Waitables` implement their own `execute()` API which can be called directly by the executor when a `ExecutorEventType::WAITABLE_EVENT` is received.
 
-The `EventsExecutor` can allow entities to not be blocked while events are being processed by implementing the `EventsQueue` through two separate queues, one for storage and accumulation of events and the other for their execution.
+The `EventsExecutor` should allow entities to push events into the queue while other events are being processed, i.e. without blocking the producers.
+The current implementation achieves that by having two separate `EventsQueue`: one for storage and accumulation of events and the other for their execution, and swapping the two whenever the executor wakes up.
 
-In order to implement the non-blocking variants of `spin()` without requiring the creation of an additional task, which in these cases it would come with complex synchronization requirements, it is sufficient to query the `TimersManager` for the time before the first timer expires and then use this value as a timeout for the conditional wait for new events.
+In order to implement the non-blocking variants of `spin()` it is possible to get from the `TimersManager` the duration until the first timer expires and then use this value as a timeout in the conditional wait for new events.
 
+The `EventsExecutor` should take care of correctly handling events that have been generated from entities that are not associated with the executor anymore, either because they have been removed or because they went out of scope.
 
 ### Cleanup and ownership
 
