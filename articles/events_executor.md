@@ -59,7 +59,9 @@ Then the executor can process these events in a FIFO manner, without need for ex
 Processing an event results in different operations depending on the entity that generated it.
 
 Timers are executed in a separate task by a timers manager, where they are kept in a priority queue sorted according to their expiration time. The task then has to monitor only the first element of the queue and can execute its callback as soon as it expires.
- 
+
+![Overview](../img/events_executor/overview.png)
+
 
 ### EventsQueue
 
