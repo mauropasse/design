@@ -176,6 +176,8 @@ In order to implement the non-blocking variants of `spin()` it is possible to ge
 
 The `EventsExecutor` should take care of correctly handling events that have been generated from entities that are not associated with the executor anymore, either because they have been removed or because they went out of scope.
 
+![Events Execution](../img/events_executor/execution.png)
+
 ### Cleanup and ownership
 
 The `EventsExecutor` should not keep ownership of the nodes and of the entities that are associated to it.
