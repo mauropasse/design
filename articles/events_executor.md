@@ -136,43 +136,30 @@ This class will forward the items needed for pushing events to the notify guard 
 Whenever an entity is associated to an executor it may already have multiple items of work ready to be processed.
 The `EventsExecutor` should tell the entity whether it has to immediately push or to discard those pending events.
 
-### Types of Events queue
 
 ##### EventsQueue abstract class
 
 There are multiple uses cases with different requirements (performance, determinism in events ordering, bounded memory).
 A single `EventsQueue` can't comply with all requirements simultaneously, so there's need for different types of queue.
-We want all queues to use the same APIs (to be able to use them interchangeably), so we created an abstract class `EventsQueue`.
-This abstract class can be used to implement different types of queues where `ExecutorEvent`s can be stored.
+We want all queues to use the same APIs to be able to use them interchangeably, so we created an abstract class `EventsQueue` which can be derived to implement different types of queues where `ExecutorEvent`s can be stored.
 The derived classes should choose which underlying container to use and the strategy for pushing and popping events.
-For example a queue implementation may be bounded or unbounded and have different pruning strategies.
+
+The EventsQueue abstract class has generic queue APIs like `enqueue()`, `dequeue()`, `empty()`, `size ()` and an `init()` API needed for some specific implementations.
+
+##### Types of Events queue
+
+A queue implementation may be bounded or unbounded and have different pruning strategies.
 Implementations may or may not check the validity of events and decide how to handle the situation where an event is not valid anymore (e.g. a subscription history cache overruns).
+Here we present some possible type of queues that could be implemented.
 
 ##### SimpleEventsQueue
 
-This is the simplest queue, as it does not peform any checks when events are pushed or extracted, so it's more suitable for situacions where CPU performance is needed.
+This is the simplest queue, just a wrapper around the std::queue.
+It does not peform any checks when events are pushed or extracted, so it's more suitable for situacions where CPU performance is needed.
 
-As long as events are pushed into the queue it will keep growing, regardless of the actual history size of the underlying middleware entity.
-This may cause several events to accumulate, for example while the `EventsExecutor` is not spinning, which can lead to out-of-memory situations or subverting the ordering of events.
+As multiple threads can push events into the queue, a locking mechanism is needed. As an alternative, a lock free queue can be implemented.
 
-This queue may fail to provide a correct ordering of events in some corner case situations.
-In particular, if an entity pushes a number of events greater than its QoS history size while the `EventsExecutor` is busy processing events, then the ordering may be compromised.
-
-Consider the following example of a system with two subscriptions A and B.
-Subscription A has a QoS history size of 1.
-While the `EventsExecutor` is busy processing events, the following events accumulates into the `EventsQueue`:
- - Event 1 from Subscription A
- - Event 2 from Subscription B
- - Event 3 from Subscription A
-
-When the `EventsExecutor` is ready to process these new events, it will start from the first pushed, i.e. the event 1 from Subscription A.
-However, when calling the `execute_subscription()` API, the message that generated event 1 will not be available anymore as it has been overwritten from the message that generated event 3.
-The `execute_subscription()` API will not fail, but rather it will process the message that generated event 3.
-This violates the ordering as event 2 should have been processed before that.
-
-##### LockFreeEventsQueue
-
-This queue is equivalent to the `SimpleEventsQueue` with the difference that is lock free, which improves performance reducing times needed to enqueue/dequeue events from it.
+This queue has the disadvantage of not being bounded, so its use should be avoided.
 
 ##### BoundedEventsQueue
 
@@ -180,24 +167,17 @@ This queue doesn't allow more events from an entity than its history size.
 For example a subscription with a history size of 5, can't have more than 5 events from it in the queue.
 
 This queue has policies to decide what to do when a new event arrives from an entity which will exceed the amount of events allowed.
-It can remove the oldest event and push a new one, which keeps the relative time ordering of the event with respect to other events (at the cost of some CPU time), or it can directly avoid pushing the new event into the queue, saving CPU but subverting the time ordering of events.
+For example, it can remove the oldest event and push a new one, keeping this way the time ordering of the event with respect to other events (at the cost of some CPU time), or it can directly avoid pushing the new event into the queue, saving CPU but subverting the time ordering of events.
 
 ##### WaitSetEventsQueue
 
-This queue has a waitset-like behaviour: There's a single entry for each entity, and the order of events execution is the same as the `SingleThreadedExecutor` executor.
-If the `TimersManager` is configured to push timer events, timers will be executed in the same thread as other entities, as it happens also with the current default executor.
+This queue is similar to a waitset, in the way that each entity occupies a single element of the queue regardless of the amount of events to process, so there's little risk of this queue to grow unbounded.
 
-The difference with respect to the waitset used in the `SingleThreadedExecutor` is that only entities which have work to do are present in the waitset.
-This way we avoid polling entities in search of new data to process.
-Also this reduces the time to look for existing elements in the waitset (to update their events counter) as there are less elements to iterate.
+Entity events are represented by the entity ID and a counter, specifying the number of events left to execute.
+This counter is bounded by the history size (QoS depth) of the entity.
 
-The events from a single entity are represented by a single event and counter, specifying the number of events left to execute from this entity (as oposed to other EventsQueue which can have multiple events).
-
-The waitset has elements ordered by entity tipe: 1.Timers / 2.Subs / 3.Services / 4.Clients / 5.Waitables.
-An iterator points to the next event to dequeue, so the order of execution of entities is the same as of the `SingleThreadedExecutor`.
-
-The waitset is internally divided in lists of events by entity tipe: Timers / Subs / Services / Clients / Waitables.
-This makes easy to add a new event to where it belongs, otherwise, some logic is needed to locate the event in the correct position to maintain the desired order of events to execute.
+The difference with respect to the `rclcpp::WaitSet` is that only entities which have work to do are present in the queue, avoiding this way polling entities in search of new data to process.
+This also reduces the time to look for existing elements, as there are less elements to iterate.
 
 ![Overview](../img/events_executor/waitset-events-queue.png)
 
