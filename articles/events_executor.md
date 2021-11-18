@@ -138,8 +138,15 @@ The `EventsExecutor` should tell the entity whether it has to immediately push o
 
 ### Types of Events queue
 
+##### EventsQueue abstract class
+
 There are multiple uses cases with different requirements (performance, determinism in events ordering, bounded memory).
 A single `EventsQueue` can't comply with all requirements simultaneously, so there's need for different types of queue.
+We want all queues to use the same APIs (to be able to use them interchangeably), so we created an abstract class `EventsQueue`.
+This abstract class can be used to implement different types of queues where `ExecutorEvent`s can be stored.
+The derived classes should choose which underlying container to use and the strategy for pushing and popping events.
+For example a queue implementation may be bounded or unbounded and have different pruning strategies.
+Implementations may or may not check the validity of events and decide how to handle the situation where an event is not valid anymore (e.g. a subscription history cache overruns).
 
 ##### SimpleEventsQueue
 
