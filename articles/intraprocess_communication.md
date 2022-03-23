@@ -513,7 +513,7 @@ The specifics of how this happens depend on the chosen middleware implementation
 
 This design document presents an implementation for the intra-process communication between clients and services.
 
-## Motivations for a new implementation
+## Motivations for an implementation
 
 Communication between clients and servers can be expensive. If the client request or server response involve the use of big data messages, we incur into a not negligible amount of CPU usage due the need for serialize/de-serialize the data.
 There is also a baseline CPU time needed just to go through all layers from rclcpp to the specific middleware implementation, with the associated bookkeping and data safety checks.
@@ -557,6 +557,35 @@ The proposed implementation creates one buffer per `Client` and `Service`.
 When a `Client` makes a request to a `Service`, it pushes the request into the buffer of the `Service` related to that topic and raises a notification, waking up the executor.
 The executor can then pop the request from the service's buffer and trigger the callback of the `Service`, which will in turn process the request and send the response to the `Client`'s buffer raiseing a notification, waking up the executor.
 The executor can then pop the message from the client's buffer and trigger its callback.
+
+The choice of having independent buffers for each `Client` and `Service` leads to the following advantages:
+
+ - It is easy to support different QoS for each `Client`/`Service`, while, at the same time, simplifying the implementation.
+ - Multiple `Client`s and `Service`s can extract messages from their own buffer in parallel without blocking each other, thus providing an higher throughput.
+
+These are the data-types stored in the buffer:
+The `Service` buffer stores `ClientIDtoRequest`s which is a map mapping the client's ID of the client making the request with the request data.
+The `Client` buffer stores `ServiceResponse`s which is just the `Service` response data.
+
+The buffers have a size equal to the depth of the history and they act as ring buffers (overwriting the oldest data when trying to push while its full). That is, if the service queue is full of requests, a new client request will erase the oldest one and be pushed at the back of the queue.
+
+New classes derived from `rclcpp::Waitable` are defined, named `ClientIntraProcessBase` and `ServiceIntraProcessBase`.
+Objects of this type are created by each `Client` and `Service` respectively if intra-process communication is set to be enabled, and it is used to notify the `Client`s and `Service`s that new requests/responses has been pushed into their ring buffer and that it needs to be processed.
+
+The `IntraProcessManager` class stores information about each `Client` and each `Service`, together with pointers to these structures.
+This allows the system to know which entities can communicate with each other and to have access to methods for pushing data into the buffers.
+
+The decision whether to send inter-process or intra-process `Client`s requests is made every time the `Client::async_send_request()` method is called. If it finds a matching service available in the same process, it will send an intra-process request.
+If the `Service` got an intra-process request, it will send the response also via intra-process communication.
+
+
+
+
+
+
+
+
+
 
 
 
