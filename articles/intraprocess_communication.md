@@ -6,7 +6,7 @@ abstract: Description of the current intra-process communication mechanism in RO
 published: true
 author: '[Alberto Soragna](https://github.com/alsora) [Juan Oxoby](https://github.com/joxoby) [Dhiraj Goel](https://github.com/dgoel)'
 date_written: 2020-03
-last_modified: 2020-03
+last_modified: 2022-03
 ---
 
 {:toc}
