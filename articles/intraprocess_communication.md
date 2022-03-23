@@ -508,22 +508,59 @@ There are some open issues that are not addressed neither on the current impleme
 
 ## Introduction
 
-Communication between clients and services in ROS 2 is currently inter-process only, i.e. client requests and server responses are sent via the underlying ROS 2 middleware layer, regardless of the entities belonging to the same or different processes. The specifics of how this happens depend on the chosen middleware implementation and may involve serialization steps.
+Communication between clients and services in ROS 2 is currently inter-process only, i.e. client requests and server responses are sent via the underlying ROS 2 middleware layer, regardless of the entities belonging to the same or different processes.
+The specifics of how this happens depend on the chosen middleware implementation and may involve serialization steps.
 
 This design document presents an implementation for the intra-process communication between clients and services.
 
 ## Motivations for a new implementation
 
-Communication between clients and servers can be expensive. If the client request or server response involve the use of big data messages, we incurr into a not negligible amount of CPU usage due the need for serialize/de-serialize the data. There is also a baseline CPU time needed just to go through all layers from rclcpp to the specific middleware implementation, with the associated bookkeping and data safety checks.
+Communication between clients and servers can be expensive. If the client request or server response involve the use of big data messages, we incur into a not negligible amount of CPU usage due the need for serialize/de-serialize the data.
+There is also a baseline CPU time needed just to go through all layers from rclcpp to the specific middleware implementation, with the associated bookkeping and data safety checks.
+This extra steps not only have an impact on the CPU usage, they also increase the latency in which data is available since it has been produced.
 
-All of this extra overhead can be avoided if we take advantage of the shared memory space between clients and servers belonging to the same process. There is no need to serialize/de-serialize data when we can just pass a pointer to the data (requests, responses) all done directly on the rclcpp layer.
+All of this extra overhead can be avoided if we take advantage of the shared memory space between clients and servers belonging to the same process.
+There is no need to serialize/de-serialize data when we can just pass a pointer to the data (requests, responses) all done directly on the rclcpp layer.
 
 There is work being done using shared memory capabilities from the rmw to communicate data between different processes, but performances are far from the good performances we can obtain performing intra-process communication only in rclcpp layer.
 
-Many ROS2 features make heavy use of service/client communication. For example, ROS2 action servers and action clients are implemented internally using several clients and services. Other usage case comes from enabling parameters on a node, which will currently create by default six services. And probably more features will be based on service/client communication.
+Many ROS2 features make heavy use of service/client communication.
+For example, ROS2 action servers and action clients are implemented internally using several clients and services.
+Other usage case comes from enabling parameters on a node, which will currently create by default six services.
+And probably more features will be based on service/client communication.
 
 The new intra-process communication implementation between publishers and subscribers have laid a groundwork which can easily be expanded to support intra-process communication between clients and services, and furthermore to ROS2 actions.
 
 All of these reasons plus the need for ROS2 to evolve and be optimized over time as it grows in popularity, decided us to implement intra-process communication between clients and services.
+
+### Incomplete Quality of Service support
+
+Same as what is currently supported between publisher/subscriber intra-process communication, the proposed implementation is limited to communication between clients and services who had set their QoS to "keep last" on history qos policy, have a "QoS depth" different than zero and "volatile" durability.
+Nevertheless, other QoS settings should not be too difficult to support if needed.
+
+### Problems when both inter and intra-process communication are needed
+
+In the case of communication between publishers and subscriptions, the current implementation of the ROS 2 middleware will try to deliver inter-process messages also to the nodes within the same process of the `Publisher`, even if they should have received an intra-process message.
+These messages will be discarded, but they still cause an overhead.
+
+This should not be a problem for communication between clients and services since it happens only between the related entities.
+That is, a client sends a request to a unique service, which will reply directly to the same client who created the request.
+
+## Proposed implementation
+
+### Overview
+
+We want to make use of the infrastructure created to support publisher/subscription intra-process communication, which has been designed with performance in mind, so it avoids any communication through the middleware between nodes in the same process.
+
+Consider a simple scenario, consisting of `Client`s and `Service`s all in the same process and with the durability QoS set to `volatile`.
+The proposed implementation creates one buffer per `Client` and `Service`.
+When a `Client` makes a request to a `Service`, it pushes the request into the buffer of the `Service` related to that topic and raises a notification, waking up the executor.
+The executor can then pop the request from the service's buffer and trigger the callback of the `Service`, which will in turn process the request and send the response to the `Client`'s buffer raiseing a notification, waking up the executor.
+The executor can then pop the message from the client's buffer and trigger its callback.
+
+
+
+
+
 
 
