@@ -502,3 +502,28 @@ There are some open issues that are not addressed neither on the current impleme
  - The proposal does not take into account the problem of having a queue with twice the size when both inter and intra-process communication are used.
  A `Publisher` or a `Subscription` with a history depth of 10 will be able to store up to 20 messages without processing them (10 intra-process and 10 inter-process).
  This issue is also present in the current implementation, since each `Subscription` is doubled.
+ 
+ 
+# Intra-process communication between Clients and Services
+
+## Introduction
+
+Communication between clients and services in ROS 2 is currently inter-process only, i.e. client requests and server responses are sent via the underlying ROS 2 middleware layer, regardless of the entities belonging to the same or different processes. The specifics of how this happens depend on the chosen middleware implementation and may involve serialization steps.
+
+This design document presents an implementation for the intra-process communication between clients and services.
+
+## Motivations for a new implementation
+
+Communication between clients and servers can be expensive. If the client request or server response involve the use of big data messages, we incurr into a not negligible amount of CPU usage due the need for serialize/de-serialize the data. There is also a baseline CPU time needed just to go through all layers from rclcpp to the specific middleware implementation, with the associated bookkeping and data safety checks.
+
+All of this extra overhead can be avoided if we take advantage of the shared memory space between clients and servers belonging to the same process. There is no need to serialize/de-serialize data when we can just pass a pointer to the data (requests, responses) all done directly on the rclcpp layer.
+
+There is work being done using shared memory capabilities from the rmw to communicate data between different processes, but performances are far from the good performances we can obtain performing intra-process communication only in rclcpp layer.
+
+Many ROS2 features make heavy use of service/client communication. For example, ROS2 action servers and action clients are implemented internally using several clients and services. Other usage case comes from enabling parameters on a node, which will currently create by default six services. And probably more features will be based on service/client communication.
+
+The new intra-process communication implementation between publishers and subscribers have laid a groundwork which can easily be expanded to support intra-process communication between clients and services, and furthermore to ROS2 actions.
+
+All of these reasons plus the need for ROS2 to evolve and be optimized over time as it grows in popularity, decided us to implement intra-process communication between clients and services.
+
+
