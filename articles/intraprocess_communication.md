@@ -575,6 +575,8 @@ Objects of this type are created by each `Client` and `Service` respectively if 
 The `IntraProcessManager` class stores information about each `Client` and each `Service`, together with pointers to these structures.
 This allows the system to know which entities can communicate with each other and to have access to methods for pushing data into the buffers.
 
+![IPC Client/Service Diagram](../img/intraprocess_communication/ipc_client_service.png)
+
 The decision whether to send inter-process or intra-process `Client`s requests is made every time the `Client::async_send_request()` method is called. If it finds a matching service available in the same process, it will send an intra-process request.
 If the `Service` got an intra-process request, it will send the response also via intra-process communication.
 
