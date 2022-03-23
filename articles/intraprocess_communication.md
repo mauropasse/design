@@ -578,6 +578,20 @@ This allows the system to know which entities can communicate with each other an
 The decision whether to send inter-process or intra-process `Client`s requests is made every time the `Client::async_send_request()` method is called. If it finds a matching service available in the same process, it will send an intra-process request.
 If the `Service` got an intra-process request, it will send the response also via intra-process communication.
 
+### Creating a client
+
+### Creating a service
+
+### Client intra-process request
+
+### Service intra-process response
+
+## Perfomance evaluation
+
+## Open Issues
+
+
+
 
 
 
